@@ -1,31 +1,14 @@
-available drivers: 3 of 4
+steps run, in order: availability -> pickup_minutes -> eligibility -> rank_drivers
+drivers: 4 candidates -> 3 available -> 3 after pickup_minutes -> 3 eligible
 {
   "request_id": "RQ-0304-005",
-  "status": "ranked",
+  "status": "assigned",
+  "driver_id": "DRV-47038",
+  "road_pickup_minutes": 4,
+  "arrival_time": "2025-03-04T13:10:45-08:00",
+  "reason": "Lowest pickup time (4 min) with no route note and matching river side.",
+  "raining": false,
   "model": "openrouter/free",
-  "generation_id": "gen-1794490384-DISPF4Dnm6KPevQEf61k",
-  "served_model": "google/gemma-4-26b-a4b-it:free",
-  "ranking": [
-    {
-      "rank": 1,
-      "driver_id": "DRV-47038",
-      "arrival_minutes": 4,
-      "arrival_time": "2025-03-04T13:10:45-08:00",
-      "reason": "Lowest road pickup time and on the correct river side."
-    },
-    {
-      "rank": 2,
-      "driver_id": "DRV-26148",
-      "arrival_minutes": 8,
-      "arrival_time": "2025-03-04T13:14:45-08:00",
-      "reason": "Second lowest road pickup time and on the correct river side, despite one-way grid routing."
-    },
-    {
-      "rank": 3,
-      "driver_id": "DRV-58423",
-      "arrival_minutes": 12,
-      "arrival_time": "2025-03-04T13:18:45-08:00",
-      "reason": "Highest road pickup time and requires crossing the river from the east side."
-    }
-  ]
+  "generation_id": "gen-1794494628-8VTw5doiwipBMmAl5O5J",
+  "served_model": "cohere/north-mini-code:free"
 }

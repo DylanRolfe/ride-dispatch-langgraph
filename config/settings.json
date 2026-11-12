@@ -1,0 +1,6 @@
+{
+  "rain_pickup_margin_minutes": 2,
+  "max_candidates": 4,
+  "max_status_age_minutes": 120,
+  "max_reason_chars": 200
+}

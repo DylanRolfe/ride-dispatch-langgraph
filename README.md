@@ -1,6 +1,6 @@
 # ride-dispatch-langgraph
 
-Python + LangGraph project that takes a week (3-9 March 2025) of ride requests and candidate-driver snapshots and ranks the best 3-4 drivers per request.
+Python + LangGraph project that takes a week (3-9 March 2025) of ride requests and candidate-driver snapshots and picks one driver per request, with a one-line reason.
 
 - `data/ride_requests.csv` – 20 ride requests
 - `data/candidate_drivers.csv` – candidate drivers per request
@@ -12,11 +12,30 @@ START -> availability -> pickup_minutes -> eligibility -> rank_drivers -> END
 ```
 
 1. `availability` – keeps only drivers with `driver_status == "available"`. `on_trip` and `offline` drivers are cut and never reach the later nodes or the model.
-2. `pickup_minutes` – drops drivers with no `road_pickup_minutes`, then keeps only the fastest 4 per request (`MAX_CANDIDATES`).
-3. `eligibility` – keeps drivers whose `status_updated_at` is at most 120 minutes (`MAX_STATUS_AGE_MIN`) before the request time. A status stamped after the request time counts as fresh; an unreadable timestamp counts as not fresh.
-4. `rank_drivers` – sends the ride request plus all available drivers to a free OpenRouter model (default `google/gemma-4-31b-it:free`, falls back to `openrouter/free`). The model ranks the top 3-4. The code validates the answer: unknown or duplicate driver IDs are dropped, and any gap is filled in road-minutes order. Arrival time is computed from the data (request time + that driver's `road_pickup_minutes`), never taken from the model.
+2. `pickup_minutes` – drops drivers with no `road_pickup_minutes`, then keeps only the fastest `max_candidates` per request.
+3. `eligibility` – keeps drivers whose `status_updated_at` is at most `max_status_age_minutes` before the request time. A status stamped after the request time counts as fresh; an unreadable timestamp counts as not fresh.
+4. `rank_drivers` – builds a **checklist** of the drivers that survived, sends it with the ride request to a free OpenRouter model (default `google/gemma-4-31b-it:free`, falls back to `openrouter/free`), and asks for one driver in a fixed shape: `{"driver_id": "<id>", "reason": "<one short line>"}`. The code accepts the reply only if it has exactly those two keys and the `driver_id` is on the checklist. Anything else is rejected and the **fallback** is used: the driver with the fastest `road_pickup_minutes`, which is the drive time to the rider (not the straight-line distance). Arrival time is the request time plus that drive time, computed from the data, never taken from the model.
 
 `rider_id` is never sent to the model.
+
+## Settings and rain
+
+Every threshold lives in one file, [`config/settings.json`](config/settings.json), and is read through `settings.load()` in [`src/ride_dispatch/settings.py`](src/ride_dispatch/settings.py). The agent and the tests both call it, so no threshold is typed anywhere else.
+
+| Setting | Used by | Meaning |
+|---|---|---|
+| `rain_pickup_margin_minutes` | `rank_drivers` | In rain, only drivers within this many minutes of the fastest road pickup stay on the checklist |
+| `max_candidates` | `pickup_minutes` | Fastest drivers kept per request |
+| `max_status_age_minutes` | `eligibility` | How old a status may be before the request |
+| `max_reason_chars` | `rank_drivers` | Reasons are cut to one line of at most this length |
+
+Raining is an input, not something read from the data. Run with `--rain` to apply the margin:
+
+```bash
+python -m src.ride_dispatch.graph RQ-0304-005 --rain
+```
+
+With rain on, a model pick outside the margin is on no checklist, so it is rejected like any other id outside it and the fallback picks the fastest driver. Without rain, any eligible driver is on the checklist.
 
 ## Setup
 
@@ -35,25 +54,44 @@ steps run, in order: availability -> pickup_minutes -> eligibility -> rank_drive
 drivers: 4 candidates -> 3 available -> 3 after pickup_minutes -> 3 eligible
 ```
 
-The tests in [`tests/test_graph_order.py`](tests/test_graph_order.py) check the order three ways: they wrap each node and the model call to log when they start, compare the `steps` list, and compare the order LangGraph itself reports. They also check that the model is never called when no driver survives. They use a fake model reply, so no API key is needed:
+The tests in [`tests/test_graph_order.py`](tests/test_graph_order.py) check the order three ways: they wrap each node and the model call to log when they start, compare the `steps` list, and compare the order LangGraph itself reports. They also check that the model is never called when no driver survives. [`tests/test_choice.py`](tests/test_choice.py) checks the single-driver reply: the fixed shape, rejection of ids outside the checklist (invented, offline, or from another request), the fastest-road-pickup fallback, and the rain margin. Both use a fake model reply, so no API key is needed:
 
 ```bash
-python -m unittest tests.test_graph_order -v
+python -m unittest tests.test_graph_order tests.test_choice -v
 ```
+
+The tests and the agent read the same numbers from `config/settings.json`. One test changes the rain margin in a temporary settings file and checks that the agent's behaviour changes with it, and another scans the agent and the test files to confirm no threshold is assigned a number in code.
 
 Because each node reads the previous node's output, running them out of order fails with a `KeyError` instead of silently giving a different answer.
 
 ## Output
 
-The output below was produced before the three checks were added. `RQ-0304-005` passes all of them unchanged (3 drivers in, 3 out), so its ranking is the same. Run on `RQ-0304-005` (3 of 4 candidates available):
+Run on `RQ-0304-005` (4 candidates, 3 available, all 3 pass the other checks):
 
 ![Graph output](docs/output.png)
 
-Full output is in [`docs/output.txt`](docs/output.txt).
+Full output is in [`docs/output.txt`](docs/output.txt). The pick is `DRV-47038`, the fastest by road minutes. `DRV-26148` is closer on the map but is slower by road because of a one-way loop. With `--rain`, the same request puts only the fastest driver on the checklist, and the model answers "Only driver listed".
 
 ### OpenRouter's record of this run
 
-The output carries OpenRouter's own IDs for the call, captured from the API response in the same run that produced the `RQ-0304-005` ranking:
+The output carries OpenRouter's own IDs for the call. I looked up the generation ID with the API (`python scripts/lookup_generation.py <generation_id>`); the saved record is [`docs/openrouter-record-single-pick.json`](docs/openrouter-record-single-pick.json), with account identifiers removed:
+
+| Field | Value |
+|---|---|
+| Generation ID | `gen-1794494628-8VTw5doiwipBMmAl5O5J` |
+| Request ID | `req-1794494628-uLnsFXJiH4lMfassFs1m` |
+| Time | 2026-11-12 14:43:48 UTC |
+| Requested model | `openrouter/free` (router) |
+| Model that served it | `cohere/north-mini-code-20260617:free` |
+| Provider | Cohere, status 200 |
+| Tokens | 489 prompt, 919 completion (native); 390 / 996 normalized |
+| Finish reason / cost | `stop` / $0 |
+
+The record has no `RQ-0304-005` ID or prompt text, so the link is the generation ID the graph printed. I did not open this call on the Activity page.
+
+### Earlier run: the top-3 version
+
+The next two sections document an earlier run, from before the model was changed to return one driver. They are kept as the record of that run. Its output carried OpenRouter's own IDs for the call, captured from the API response in the same run that produced the `RQ-0304-005` ranking:
 
 ```
 "generation_id": "gen-1794490384-DISPF4Dnm6KPevQEf61k"
@@ -115,23 +153,25 @@ The Request ID and Generation ID are identical to the ones the graph printed and
 
 ## Prompt excerpt
 
-From `_build_prompt` in [`src/ride_dispatch/graph.py`](src/ride_dispatch/graph.py):
+From `build_prompt` in [`src/ride_dispatch/graph.py`](src/ride_dispatch/graph.py):
 
 ```
 Ride request context: {requested_at, pickup_zone, pickup_lat, pickup_lng, pickup_river_side,
                        dropoff_zone, is_bridge_case, distance_time_disagree}
 
-Available candidate drivers: [{driver_id, straight_line_km, road_pickup_minutes,
-                               driver_river_side, driver_lat, driver_lng,
-                               status_updated_at, route_note}, ...]
+(In rain only:) It is raining, so only drivers within {margin} minutes of the fastest road pickup are listed.
 
-Rank the top {n} drivers to offer this ride, best first. Prefer the lowest road_pickup_minutes
-unless a route_note, the river side or the bridge context makes that time unreliable.
-Only use driver_ids from the list above. Reply with JSON only:
-{"ranking": [{"driver_id": "<id>", "reason": "<short>"}]}
+Checklist of drivers you may choose from: [{driver_id, straight_line_km, road_pickup_minutes,
+                                            driver_river_side, driver_lat, driver_lng,
+                                            status_updated_at, route_note}, ...]
+
+Pick the single best driver for this ride. Prefer the lowest road_pickup_minutes (the drive time to
+the rider) unless a route_note makes that time unreliable. The driver_id MUST be one from the
+checklist above. Reply with JSON only, in exactly this shape and nothing else:
+{"driver_id": "<one id from the checklist>", "reason": "<one short line>"}
 ```
 
-The road-minutes rule matters because straight-line distance can mislead: in the example above, `DRV-26148` is physically closest (0.33 km) but needs 8 minutes by road because of a one-way loop, so it ranks below `DRV-47038` (0.67 km, 4 min).
+The road-minutes rule matters because straight-line distance can mislead: in the example above, `DRV-26148` is physically closest (0.33 km) but needs 8 minutes by road because of a one-way loop, so the fallback prefers `DRV-47038` (0.67 km, 4 min).
 
 ## Failure handling
 
@@ -139,9 +179,9 @@ The graph does not crash on a bad model reply or an empty candidate list. Every 
 
 | `status` | When | Result |
 |---|---|---|
-| `ranked` | Model returned enough valid, unique candidate IDs | The model's ranking (top 3-4) |
-| `ranked_fallback` | Model returned null / "nobody", IDs not on the list, duplicates, malformed JSON, or the API failed | Valid picks kept in the model's order, remaining slots filled by fastest `road_pickup_minutes` |
-| `pending_approval` | No driver is left after `availability`, `pickup_minutes` and `eligibility` | `"message": "Pending approval"`, empty `ranking`; the model is not called |
+| `assigned` | The model's reply has exactly `driver_id` and `reason`, and the id is on the checklist | The model's driver, its one-line reason, and arrival time from the data |
+| `assigned_fallback` | Wrong shape, an id outside the checklist (invented, offline, from another request, or outside the rain margin), malformed JSON, or the API failed | The driver with the fastest `road_pickup_minutes`; `rejected` says why (`bad_shape`, `not_on_checklist` or `model_unavailable`) and what the model said |
+| `pending_approval` | No driver is left after `availability`, `pickup_minutes` and `eligibility` | `"message": "Pending approval"`; the model is not called |
 
 ## Plan-mode prompt
 
@@ -155,6 +195,10 @@ Second (the ranking design this repo implements):
 
 > "Ignore my last message. Instead, I want the code to work like this: the first node, in LangGraph, scans for available drivers and cuts out the unavailable and offline ones before the second node. The second node then has all the available drivers. These are sent, along with the ride request, to OpenRouter, which ranks the top three or four. Create a plan to implement this and let me know."
 
+Third (changed the output to one driver and added the rain rule), tidied up:
+
+> "Send it to the model in the second node and have it return one driver ID and a one-line reason, in a fixed shape the code can read. Reject any driver ID outside the checklist. The fallback picks the fastest by road pickup minutes, the drive time to the rider. When it's raining, only accept drivers within a couple of minutes of the fastest pickup. Store that number in one setting spot, and check that the tests and the agent both read that one number, so no threshold is typed in the test code."
+
 ## Pushback
 
 I read the plan and asked what happens if no drivers are available, since it would crash. I looked through Claude Code's plan, saw that it didn't cover what happens when there are zero available drivers, and flagged it myself with this question to get it fixed. My question, tidied up:
@@ -167,18 +211,19 @@ The plan had no branch for zero candidates: if every driver was `on_trip` or `of
 
 | Situation | What comes back |
 |---|---|
-| No available drivers for the request | `status: "pending_approval"`, `message: "Pending approval"`, empty `ranking`. The model is never called. |
-| Model names nobody, or a driver not on the list | `status: "ranked_fallback"`: the valid picks, topped up in road-minutes order. Always real, available drivers. |
-| Normal case | `status: "ranked"`: the model's top 3-4 with arrival times computed from the data. |
+| No drivers left for the request | `status: "pending_approval"`, `message: "Pending approval"`. The model is never called. |
+| Model names nobody, or a driver not on the checklist | `status: "assigned_fallback"`: the fastest driver by road pickup minutes, with `rejected` explaining why. Always a real, eligible driver. |
+| Normal case | `status: "assigned"`: the model's driver, its one-line reason, and the arrival time computed from the data. |
 
 ```json
 {
   "request_id": "RQ-0304-005",
   "status": "pending_approval",
-  "message": "Pending approval",
-  "ranking": []
+  "message": "Pending approval"
 }
 ```
+
+(This section was written when the model still ranked 3-4 drivers. The result now holds one driver, as shown above.)
 
 ## OpenRouter usage
 
