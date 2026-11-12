@@ -32,6 +32,30 @@ Run on `RQ-0304-005` (3 of 4 candidates available):
 
 Full output is in [`docs/output.txt`](docs/output.txt).
 
+### OpenRouter's record of this run
+
+The output carries OpenRouter's own IDs for the call, captured from the API response in the same run that produced the `RQ-0304-005` ranking:
+
+```
+"generation_id": "gen-1794490384-DISPF4Dnm6KPevQEf61k"
+"served_model":  "google/gemma-4-26b-a4b-it:free"      (requested: openrouter/free)
+```
+
+I then looked that ID up with OpenRouter's generation API (`python scripts/lookup_generation.py <generation_id>`). The single record, saved in [`docs/openrouter-record.json`](docs/openrouter-record.json) with account identifiers removed, says:
+
+| Field | Value |
+|---|---|
+| Generation ID | `gen-1794490384-DISPF4Dnm6KPevQEf61k` |
+| Request ID | `req-1794490384-I0f7rd1w1ZY0giEMPlsO` |
+| Time | 2026-11-12 13:33:04 UTC |
+| Requested model | `openrouter/free` (router) |
+| Model that served it | `google/gemma-4-26b-a4b-it-20260403:free` |
+| Provider | Google AI Studio, status 200 |
+| Tokens | 375 prompt, 109 completion |
+| Finish reason / cost | `stop` / $0 |
+
+The record has no prompt text and no `RQ-0304-005` ID, because OpenRouter never sees my request IDs. The link is the generation ID: the graph printed it in the output for `RQ-0304-005`, and the record above is what OpenRouter holds for that ID.
+
 ## Prompt excerpt
 
 From `_build_prompt` in [`src/ride_dispatch/graph.py`](src/ride_dispatch/graph.py):
@@ -103,6 +127,6 @@ The plan had no branch for zero candidates: if every driver was `on_trip` or `of
 
 Activity from my OpenRouter dashboard (Explore tab, Request Count by Model, minute rollup) showing the graph is calling the free models. On 12 Nov it logged 7 requests across 5 free models (Gemma 4 31B 2, Nemotron 3 Ultra 2, Flint 1, ERNIE-5.5-Flash-Preview 1, North Mini Code 1); the `openrouter/free` fallback routes between free models, which is why more than one appears.
 
-The highlighted bar and table row mark the request behind the `RQ-0304-005` output shown above. It is the last request in the chart, served by ERNIE-5.5-Flash-Preview through `openrouter/free`, which matches `"model": "openrouter/free"` in the output. The other bars are my earlier live runs and tests. The dashboard does not record request IDs, so I matched it by order: the `RQ-0304-005` output run was the last live call I made.
+This screenshot is general usage from my earlier live runs and tests, taken before the run shown in the Output section. It does not identify any single request. The record for the `RQ-0304-005` output run is the ID lookup above, not a bar in this chart.
 
 ![OpenRouter activity](docs/openrouter-activity-minute.png)

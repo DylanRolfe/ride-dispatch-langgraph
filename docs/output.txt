@@ -3,27 +3,29 @@ available drivers: 3 of 4
   "request_id": "RQ-0304-005",
   "status": "ranked",
   "model": "openrouter/free",
+  "generation_id": "gen-1794490384-DISPF4Dnm6KPevQEf61k",
+  "served_model": "google/gemma-4-26b-a4b-it:free",
   "ranking": [
     {
       "rank": 1,
       "driver_id": "DRV-47038",
       "arrival_minutes": 4,
       "arrival_time": "2025-03-04T13:10:45-08:00",
-      "reason": "Lowest road_pickup_minutes (4), no route_note, same west side as pickup, no bridge crossing \u2014 time is reliable"
+      "reason": "Lowest road pickup time and on the correct river side."
     },
     {
       "rank": 2,
       "driver_id": "DRV-26148",
       "arrival_minutes": 8,
       "arrival_time": "2025-03-04T13:14:45-08:00",
-      "reason": "8 min on same west side, but one-way grid loop route_note may add time; still no cross-river needed"
+      "reason": "Second lowest road pickup time and on the correct river side, despite one-way grid routing."
     },
     {
       "rank": 3,
       "driver_id": "DRV-58423",
       "arrival_minutes": 12,
       "arrival_time": "2025-03-04T13:18:45-08:00",
-      "reason": "Slowest (12 min) and on east side, requiring cross-river bridge route to reach west-side pickup \u2014 least reliable"
+      "reason": "Highest road pickup time and requires crossing the river from the east side."
     }
   ]
 }

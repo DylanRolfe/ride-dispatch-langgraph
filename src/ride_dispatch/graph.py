@@ -96,13 +96,16 @@ def _ask_model(prompt: str) -> dict | None:
                     time.sleep(3 * (attempt + 1))
                     continue
                 resp.raise_for_status()
-                text = resp.json()["choices"][0]["message"]["content"]
+                data = resp.json()
+                text = data["choices"][0]["message"]["content"]
                 start = text.find("{")
                 parsed, _ = json.JSONDecoder().raw_decode(text[start:]) if start != -1 else (None, 0)
             except (requests.RequestException, KeyError, IndexError, TypeError, ValueError):
                 continue  # network/server error, odd response shape, or malformed JSON -> retry
             if isinstance(parsed, dict):
-                return {"model": attempt_model, **parsed}
+                # generation_id is OpenRouter's own request id: it can be looked up on the Activity page / API
+                return {**parsed, "model": attempt_model,
+                        "generation_id": data.get("id"), "served_model": data.get("model")}
     return None  # caller falls back to road-minutes order
 
 
@@ -161,6 +164,8 @@ def rank_drivers(state: State) -> State:
         "request_id": request_id,
         "status": status,
         "model": answer["model"] if answer else None,
+        "generation_id": answer.get("generation_id") if answer else None,
+        "served_model": answer.get("served_model") if answer else None,
         "ranking": ranking,
     }}
 
