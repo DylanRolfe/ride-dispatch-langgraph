@@ -64,7 +64,7 @@ The graph does not crash on a bad model reply or an empty candidate list. Every 
 
 ## Plan-mode prompt
 
-The design came from two prompts given in plan mode, quoted as written.
+I designed this with two prompts in plan mode, quoted as I wrote them.
 
 First (two-node graph):
 
@@ -76,11 +76,11 @@ Second (the ranking design this repo implements):
 
 ## Pushback
 
-The question that exposed the gap was asked by the project owner:
+I read the plan and asked what happens if no drivers are available, since it would crash. My exact question:
 
 > "But if it were to return like nobody, or it starts returning people that aren't on the list, what are you going to return to the user? And what are you going to output?"
 
-The plan had no branch for zero candidates: if every driver was `on_trip` or `offline`, nothing reached the model node and it crashed. The owner's question is what led to adding one.
+The plan had no branch for zero candidates: if every driver was `on_trip` or `offline`, nothing reached the model node and it crashed. My question is what led to adding one.
 
 **What the user gets back:**
 
