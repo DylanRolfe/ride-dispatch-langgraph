@@ -35,6 +35,7 @@ DETAIL_FIELDS = [
 
 
 class State(TypedDict, total=False):
+    request_id: str                  # input: the ride request being dispatched
     drivers: pd.DataFrame            # input: candidate drivers
     request_time: str                # input: requested_at of the ride (ISO 8601)
     available_drivers: pd.DataFrame  # node 1 output
@@ -72,47 +73,65 @@ def _ask_model(request_id: str, candidates: list[dict]) -> dict:
         "route_note makes that time unreliable. Reply with JSON only: "
         '{"driver_id": "<id>", "arrival_minutes": <number>, "reason": "<short>"}'
     )
-    last_err = None
     for attempt_model in dict.fromkeys([model, FALLBACK_MODEL]):  # configured free model, then free router
         for attempt in range(3):
-            resp = requests.post(
-                OPENROUTER_URL,
-                headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"},
-                json={"model": attempt_model, "messages": [{"role": "user", "content": prompt}], "temperature": 0},
-                timeout=90,
-            )
-            if resp.status_code == 429:  # free tier rate limit
-                last_err = resp.text[:200]
-                time.sleep(3 * (attempt + 1))
-                continue
-            resp.raise_for_status()
-            text = resp.json()["choices"][0]["message"]["content"]
-            match = re.search(r"\{.*\}", text, re.DOTALL)
-            if not match:
-                last_err = f"no JSON in reply: {text[:200]}"
-                continue
-            return {"model": attempt_model, **json.loads(match.group(0))}
-    raise RuntimeError(f"OpenRouter free models unavailable: {last_err}")
+            try:
+                resp = requests.post(
+                    OPENROUTER_URL,
+                    headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"},
+                    json={"model": attempt_model, "messages": [{"role": "user", "content": prompt}], "temperature": 0},
+                    timeout=90,
+                )
+                if resp.status_code == 429:  # free tier rate limit
+                    time.sleep(3 * (attempt + 1))
+                    continue
+                resp.raise_for_status()
+                text = resp.json()["choices"][0]["message"]["content"]
+                start = text.find("{")
+                parsed, _ = json.JSONDecoder().raw_decode(text[start:]) if start != -1 else (None, 0)
+            except (requests.RequestException, KeyError, IndexError, TypeError, ValueError):
+                continue  # network/server error, odd response shape, or malformed JSON -> retry
+            if isinstance(parsed, dict):
+                return {"model": attempt_model, **parsed}
+    return None  # every attempt failed; caller falls back to rank 1
 
 
 def choose_driver(state: State) -> State:
     """Node 3: the model picks one driver; arrival comes from the data, not the model."""
-    (request_id, candidates), = state["driver_details"].items()
+    request_id = state["request_id"]
+    candidates = state["driver_details"].get(request_id, [])
+    if not candidates:  # nobody available: return a clean answer, no model call
+        return {"decision": {
+            "request_id": request_id,
+            "status": "no_driver_available",
+            "message": "No drivers available",
+            "driver_id": None,
+            "arrival_minutes": None,
+            "arrival_time": None,
+        }}
+
     answer = _ask_model(request_id, candidates)
-    chosen = next((c for c in candidates if c["driver_id"] == answer.get("driver_id")), None)
-    if chosen is None:  # model returned an id that isn't a candidate -> fall back to rank 1
-        chosen, answer["fallback"] = candidates[0], "model answer invalid; used rank 1"
+    chosen, status, note = None, "assigned", None
+    if answer is None:
+        note = "model unavailable; used rank 1"
+    else:
+        chosen = next((c for c in candidates if c["driver_id"] == answer.get("driver_id")), None)
+        if chosen is None:
+            note = "model answer invalid; used rank 1"
+    if chosen is None:  # fall back to the fastest road pickup
+        chosen, status = candidates[0], "assigned_fallback"
     minutes = chosen["road_pickup_minutes"]
     arrival = pd.Timestamp(state["request_time"]) + timedelta(minutes=int(minutes))
     return {
         "decision": {
             "request_id": request_id,
+            "status": status,
             "driver_id": chosen["driver_id"],
             "arrival_minutes": int(minutes),
             "arrival_time": arrival.isoformat(),
-            "model": answer["model"],
-            "reason": answer.get("reason"),
-            **({"fallback": answer["fallback"]} if "fallback" in answer else {}),
+            "model": answer["model"] if answer else None,
+            "reason": answer.get("reason") if status == "assigned" else note,
+            **({"model_said": answer.get("driver_id")} if status == "assigned_fallback" and answer else {}),
         }
     }
 
@@ -134,13 +153,15 @@ def run_request(request_id: str) -> dict:
     requests_df = pd.read_csv(DATA_DIR / "ride_requests.csv")
     drivers = drivers[drivers["request_id"] == request_id]
     request_time = requests_df.loc[requests_df["request_id"] == request_id, "requested_at"].iloc[0]
-    return build_graph().invoke({"drivers": drivers, "request_time": request_time})
+    return build_graph().invoke(
+        {"request_id": request_id, "drivers": drivers, "request_time": request_time}
+    )
 
 
 if __name__ == "__main__":
     rid = sys.argv[1] if len(sys.argv) > 1 else "RQ-0304-005"
     result = run_request(rid)
     print("ranked candidates:")
-    for d in result["driver_details"][rid]:
+    for d in result["driver_details"].get(rid, []):
         print(f"  #{d['rank']} {d['driver_id']}  {d['road_pickup_minutes']} min  ({d['straight_line_km']} km)")
     print(json.dumps(result["decision"], indent=2))
