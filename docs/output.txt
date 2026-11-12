@@ -1,0 +1,12 @@
+ranked candidates:
+  #1 DRV-47038  4 min  (0.67 km)
+  #2 DRV-26148  8 min  (0.33 km)
+  #3 DRV-58423  12 min  (1.52 km)
+{
+  "request_id": "RQ-0304-005",
+  "driver_id": "DRV-47038",
+  "arrival_minutes": 4,
+  "arrival_time": "2025-03-04T13:10:45-08:00",
+  "model": "openrouter/free",
+  "reason": "Fastest with no route note indicating unreliability"
+}
