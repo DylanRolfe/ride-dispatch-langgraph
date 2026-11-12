@@ -13,7 +13,7 @@ START -> filter_available -> driver_details -> choose_driver -> END
 
 1. `filter_available` – keeps only drivers with `driver_status == "available"` (`on_trip` and `offline` are dropped).
 2. `driver_details` – ranks the remaining drivers by `road_pickup_minutes` (fastest first).
-3. `choose_driver` – a free OpenRouter model (default `google/gemma-4-31b-it:free`, falls back to `openrouter/free`) picks one driver. Arrival is computed from the data (request time + road minutes), not by the model.
+3. `choose_driver` – a free OpenRouter model (default `google/gemma-4-31b-it:free`, falls back to `openrouter/free`) picks one driver. Arrival is computed from the data (request time + road minutes), not by the model. If the model's answer is unusable, the rank 1 driver is used (see Failure handling).
 
 ## Setup
 
@@ -36,11 +36,33 @@ ranked candidates:
   #3 DRV-58423  12 min  (1.52 km)
 {
   "request_id": "RQ-0304-005",
+  "status": "assigned",
   "driver_id": "DRV-47038",
   "arrival_minutes": 4,
   "arrival_time": "2025-03-04T13:10:45-08:00",
   "model": "openrouter/free",
-  "reason": "Fastest with no route note indicating unreliability"
+  "reason": "Lowest road pickup time with no route note making it unreliable"
+}
+```
+
+## Failure handling
+
+The graph never crashes on a bad model reply or an empty candidate list. Every result has a `status`:
+
+| `status` | When | Result |
+|---|---|---|
+| `assigned` | Model picked a valid candidate | Model's pick; arrival = request time + that driver's road minutes |
+| `assigned_fallback` | Model returned null / "nobody", an ID not on the list, malformed JSON, or the API failed | Rank 1 driver (fastest road pickup); `reason` says why, and `model_said` shows what the model answered |
+| `no_driver_available` | No candidate is `available` | `"message": "No drivers available"`, `driver_id`, `arrival_minutes` and `arrival_time` are `null`; the model is not called |
+
+```json
+{
+  "request_id": "RQ-0304-005",
+  "status": "no_driver_available",
+  "message": "No drivers available",
+  "driver_id": null,
+  "arrival_minutes": null,
+  "arrival_time": null
 }
 ```
 
