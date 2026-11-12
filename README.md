@@ -76,7 +76,7 @@ Second (the ranking design this repo implements):
 
 ## Pushback
 
-I read the plan and asked what happens if no drivers are available, since it would crash. My question, tidied up:
+I read the plan and asked what happens if no drivers are available, since it would crash. I looked through Claude Code's plan, saw that it didn't cover what happens when there are zero available drivers, and flagged it myself with this question to get it fixed. My question, tidied up:
 
 > "What happens if the model returns nobody, or starts returning drivers that aren't on the list? What are you going to return to the user, and what are you going to output?"
 
