@@ -1,13 +1,29 @@
-ranked candidates:
-  #1 DRV-47038  4 min  (0.67 km)
-  #2 DRV-26148  8 min  (0.33 km)
-  #3 DRV-58423  12 min  (1.52 km)
+available drivers: 3 of 4
 {
   "request_id": "RQ-0304-005",
-  "status": "assigned",
-  "driver_id": "DRV-47038",
-  "arrival_minutes": 4,
-  "arrival_time": "2025-03-04T13:10:45-08:00",
+  "status": "ranked",
   "model": "openrouter/free",
-  "reason": "Lowest road pickup time with no route note making it unreliable"
+  "ranking": [
+    {
+      "rank": 1,
+      "driver_id": "DRV-47038",
+      "arrival_minutes": 4,
+      "arrival_time": "2025-03-04T13:10:45-08:00",
+      "reason": "Lowest road_pickup_minutes (4), no route_note, same west side as pickup, no bridge crossing \u2014 time is reliable"
+    },
+    {
+      "rank": 2,
+      "driver_id": "DRV-26148",
+      "arrival_minutes": 8,
+      "arrival_time": "2025-03-04T13:14:45-08:00",
+      "reason": "8 min on same west side, but one-way grid loop route_note may add time; still no cross-river needed"
+    },
+    {
+      "rank": 3,
+      "driver_id": "DRV-58423",
+      "arrival_minutes": 12,
+      "arrival_time": "2025-03-04T13:18:45-08:00",
+      "reason": "Slowest (12 min) and on east side, requiring cross-river bridge route to reach west-side pickup \u2014 least reliable"
+    }
+  ]
 }
