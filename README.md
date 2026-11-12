@@ -8,11 +8,13 @@ Python + LangGraph project that takes a week (3-9 March 2025) of ride requests a
 ## Graph
 
 ```
-START -> filter_available -> rank_drivers -> END
+START -> availability -> pickup_minutes -> eligibility -> rank_drivers -> END
 ```
 
-1. `filter_available` – keeps only drivers with `driver_status == "available"`. `on_trip` and `offline` drivers are cut and never reach node 2 or the model.
-2. `rank_drivers` – sends the ride request plus all available drivers to a free OpenRouter model (default `google/gemma-4-31b-it:free`, falls back to `openrouter/free`). The model ranks the top 3-4. The code validates the answer: unknown or duplicate driver IDs are dropped, and any gap is filled in road-minutes order. Arrival time is computed from the data (request time + that driver's `road_pickup_minutes`), never taken from the model.
+1. `availability` – keeps only drivers with `driver_status == "available"`. `on_trip` and `offline` drivers are cut and never reach the later nodes or the model.
+2. `pickup_minutes` – drops drivers with no `road_pickup_minutes`, then keeps only the fastest 4 per request (`MAX_CANDIDATES`).
+3. `eligibility` – keeps drivers whose `status_updated_at` is at most 120 minutes (`MAX_STATUS_AGE_MIN`) before the request time. A status stamped after the request time counts as fresh; an unreadable timestamp counts as not fresh.
+4. `rank_drivers` – sends the ride request plus all available drivers to a free OpenRouter model (default `google/gemma-4-31b-it:free`, falls back to `openrouter/free`). The model ranks the top 3-4. The code validates the answer: unknown or duplicate driver IDs are dropped, and any gap is filled in road-minutes order. Arrival time is computed from the data (request time + that driver's `road_pickup_minutes`), never taken from the model.
 
 `rider_id` is never sent to the model.
 
@@ -24,9 +26,26 @@ cp .env.example .env   # then add your OPENROUTER_API_KEY
 python -m src.ride_dispatch.graph RQ-0304-005
 ```
 
+## Checking the run order
+
+All three checks run before the model, in this order: `availability`, `pickup_minutes`, `eligibility`, then `rank_drivers`, which makes the one model call. Each node adds its name to a `steps` list in the state, and the command line prints it:
+
+```
+steps run, in order: availability -> pickup_minutes -> eligibility -> rank_drivers
+drivers: 4 candidates -> 3 available -> 3 after pickup_minutes -> 3 eligible
+```
+
+The tests in [`tests/test_graph_order.py`](tests/test_graph_order.py) check the order three ways: they wrap each node and the model call to log when they start, compare the `steps` list, and compare the order LangGraph itself reports. They also check that the model is never called when no driver survives. They use a fake model reply, so no API key is needed:
+
+```bash
+python -m unittest tests.test_graph_order -v
+```
+
+Because each node reads the previous node's output, running them out of order fails with a `KeyError` instead of silently giving a different answer.
+
 ## Output
 
-Run on `RQ-0304-005` (3 of 4 candidates available):
+The output below was produced before the three checks were added. `RQ-0304-005` passes all of them unchanged (3 drivers in, 3 out), so its ranking is the same. Run on `RQ-0304-005` (3 of 4 candidates available):
 
 ![Graph output](docs/output.png)
 
@@ -122,7 +141,7 @@ The graph does not crash on a bad model reply or an empty candidate list. Every 
 |---|---|---|
 | `ranked` | Model returned enough valid, unique candidate IDs | The model's ranking (top 3-4) |
 | `ranked_fallback` | Model returned null / "nobody", IDs not on the list, duplicates, malformed JSON, or the API failed | Valid picks kept in the model's order, remaining slots filled by fastest `road_pickup_minutes` |
-| `pending_approval` | No candidate is `available` | `"message": "Pending approval"`, empty `ranking`; the model is not called |
+| `pending_approval` | No driver is left after `availability`, `pickup_minutes` and `eligibility` | `"message": "Pending approval"`, empty `ranking`; the model is not called |
 
 ## Plan-mode prompt
 
