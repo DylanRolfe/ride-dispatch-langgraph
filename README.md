@@ -56,6 +56,35 @@ I then looked that ID up with OpenRouter's generation API (`python scripts/looku
 
 The record has no prompt text and no `RQ-0304-005` ID, because OpenRouter never sees my request IDs. The link is the generation ID: the graph printed it in the output for `RQ-0304-005`, and the record above is what OpenRouter holds for that ID.
 
+### The same call on OpenRouter's Activity page
+
+I also opened this request on the OpenRouter Activity page (Logs > Generations, times shown in EST) and copied its row and its Generation details as text. The API Key column, which is just my key's label, is left out.
+
+```
+Date:        Nov 12, 08:33 AM
+Model:       Gemma 4 26B A4B (free)
+Provider:    Google AI Studio
+Cost:        $0.00
+Input:       643 tok
+Output:      146 tok
+Usage type:  Credits
+Speed:       37.4 tok/s
+Routing overhead: 0 s
+Time to first token: 1.11 s
+Finish reason: stop
+
+Generation details
+Model ID:     google/gemma-4-26b-a4b-it:free
+Canonical ID: google/gemma-4-26b-a4b-it-20260403:free
+Request ID:   req-1794490384-I0f7rd1w1ZY0giEMPlsO
+Generation ID: gen-1794490384-DISPF4Dnm6KPevQEf61k
+Streaming:    true
+Provider response: Google AI Studio, 200, 1.1 s
+Total: 3.9 s
+```
+
+The Request ID and Generation ID are identical to the ones the graph printed and to the API record above, and the model that served it is Gemma 4 26B A4B. The Activity page says "I/O logging is not enabled" for my account, so it shows no prompt or completion text. Because of that, the prompt cannot be checked against this row; the ID is the link.
+
 ## Prompt excerpt
 
 From `_build_prompt` in [`src/ride_dispatch/graph.py`](src/ride_dispatch/graph.py):
