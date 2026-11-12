@@ -62,13 +62,42 @@ The graph does not crash on a bad model reply or an empty candidate list. Every 
 | `ranked_fallback` | Model returned null / "nobody", IDs not on the list, duplicates, malformed JSON, or the API failed | Valid picks kept in the model's order, remaining slots filled by fastest `road_pickup_minutes` |
 | `pending_approval` | No candidate is `available` | `"message": "Pending approval"`, empty `ranking`; the model is not called |
 
+## Plan-mode prompt
+
+The design came from two prompts given in plan mode, quoted as written.
+
+First (two-node graph):
+
+> "Can you make a two-node graph? And I want like the nodes to kind of be like the first one receives available drivers, so it only takes in people who have the available tag. On trip and offline don't come through. And then the second node is going to take in their other data, like how far away they are from the trip, etc., like all that."
+
+Second (the ranking design this repo implements):
+
+> "Okay, so basically, like, ignore like my last message. What I want you to do is like the code needs to do, like the first node, and I think it's LangGraph, needs to just scan for available drivers, and then it cuts out all the unavailable ones or offline ones for the next stage, into the second node. We have all the available drivers. This is then sent with the user and all the drivers to the open router key, the open router then bases its top three or four rankings so just create a plan to implement this, and let me know."
+
 ## Pushback
 
-The question that changed the design came from the project owner during planning:
+The question that exposed the gap was asked by the project owner:
 
 > "But if it were to return like nobody, or it starts returning people that aren't on the list, what are you going to return to the user? And what are you going to output?"
 
-The plan had no branch for zero candidates: if every driver was `on_trip` or `offline`, nothing reached the model node and it crashed. That question exposed the gap, and the answer is the `pending_approval` path above: when node 1 leaves no available drivers, the graph returns `status: "pending_approval"` with `"message": "Pending approval"` and an empty ranking, and the model is never called. A model reply naming nobody, or a driver not on the list, is handled by the `ranked_fallback` path.
+The plan had no branch for zero candidates: if every driver was `on_trip` or `offline`, nothing reached the model node and it crashed. The owner's question is what led to adding one.
+
+**What the user gets back:**
+
+| Situation | What comes back |
+|---|---|
+| No available drivers for the request | `status: "pending_approval"`, `message: "Pending approval"`, empty `ranking`. The model is never called. |
+| Model names nobody, or a driver not on the list | `status: "ranked_fallback"`: the valid picks, topped up in road-minutes order. Always real, available drivers. |
+| Normal case | `status: "ranked"`: the model's top 3-4 with arrival times computed from the data. |
+
+```json
+{
+  "request_id": "RQ-0304-005",
+  "status": "pending_approval",
+  "message": "Pending approval",
+  "ranking": []
+}
+```
 
 ## OpenRouter usage
 
