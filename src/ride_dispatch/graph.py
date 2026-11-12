@@ -56,6 +56,8 @@ class State(TypedDict, total=False):
 def filter_available(state: State) -> State:
     """Node 1: only drivers tagged 'available' come through (on_trip / offline are cut)."""
     drivers = state["drivers"]
+    if drivers.empty or "driver_status" not in drivers.columns:  # zero candidates / no data at all
+        return {"available_drivers": pd.DataFrame(columns=["request_id", *DRIVER_FIELDS])}
     return {"available_drivers": drivers[drivers["driver_status"] == "available"]}
 
 
@@ -176,7 +178,10 @@ def build_graph():
 def run_request(request_id: str) -> dict:
     drivers = pd.read_csv(DATA_DIR / "candidate_drivers.csv")
     requests_df = pd.read_csv(DATA_DIR / "ride_requests.csv")
-    request = requests_df.loc[requests_df["request_id"] == request_id].iloc[0].to_dict()
+    match = requests_df.loc[requests_df["request_id"] == request_id]
+    if match.empty:
+        raise ValueError(f"Unknown request_id {request_id!r}: not in ride_requests.csv")
+    request = match.iloc[0].to_dict()
     drivers = drivers[drivers["request_id"] == request_id]
     return build_graph().invoke({"request_id": request_id, "request": request, "drivers": drivers})
 
