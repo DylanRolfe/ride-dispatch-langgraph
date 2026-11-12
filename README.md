@@ -64,21 +64,21 @@ The graph does not crash on a bad model reply or an empty candidate list. Every 
 
 ## Plan-mode prompt
 
-I designed this with two prompts in plan mode, quoted as I wrote them.
+I designed this with two prompts in plan mode (tidied up here, with filler words removed).
 
 First (two-node graph):
 
-> "Can you make a two-node graph? And I want like the nodes to kind of be like the first one receives available drivers, so it only takes in people who have the available tag. On trip and offline don't come through. And then the second node is going to take in their other data, like how far away they are from the trip, etc., like all that."
+> "Can you make a two-node graph? The first node receives available drivers, so it only takes in drivers with the available tag. On-trip and offline drivers don't come through. The second node takes in their other data, like how far away they are from the trip."
 
 Second (the ranking design this repo implements):
 
-> "Okay, so basically, like, ignore like my last message. What I want you to do is like the code needs to do, like the first node, and I think it's LangGraph, needs to just scan for available drivers, and then it cuts out all the unavailable ones or offline ones for the next stage, into the second node. We have all the available drivers. This is then sent with the user and all the drivers to the open router key, the open router then bases its top three or four rankings so just create a plan to implement this, and let me know."
+> "Ignore my last message. Instead, I want the code to work like this: the first node, in LangGraph, scans for available drivers and cuts out the unavailable and offline ones before the second node. The second node then has all the available drivers. These are sent, along with the ride request, to OpenRouter, which ranks the top three or four. Create a plan to implement this and let me know."
 
 ## Pushback
 
-I read the plan and asked what happens if no drivers are available, since it would crash. My exact question:
+I read the plan and asked what happens if no drivers are available, since it would crash. My question, tidied up:
 
-> "But if it were to return like nobody, or it starts returning people that aren't on the list, what are you going to return to the user? And what are you going to output?"
+> "What happens if the model returns nobody, or starts returning drivers that aren't on the list? What are you going to return to the user, and what are you going to output?"
 
 The plan had no branch for zero candidates: if every driver was `on_trip` or `offline`, nothing reached the model node and it crashed. My question is what led to adding one.
 
