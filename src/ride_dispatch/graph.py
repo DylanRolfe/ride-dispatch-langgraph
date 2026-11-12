@@ -1,11 +1,25 @@
-"""Two-node LangGraph: keep available drivers, then pass on their trip data."""
+"""LangGraph: keep available drivers -> rank by road pickup minutes -> free OpenRouter model picks one."""
+import json
+import os
+import re
+import sys
+import time
+from datetime import timedelta
 from pathlib import Path
 from typing import TypedDict
 
 import pandas as pd
+import requests
+from dotenv import load_dotenv
 from langgraph.graph import END, START, StateGraph
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = ROOT / "data"
+load_dotenv(ROOT / ".env")
+
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+DEFAULT_MODEL = "google/gemma-4-31b-it:free"  # free tier; override with OPENROUTER_MODEL
+FALLBACK_MODEL = "openrouter/free"  # OpenRouter's free-model router
 
 DETAIL_FIELDS = [
     "request_id",
@@ -21,9 +35,11 @@ DETAIL_FIELDS = [
 
 
 class State(TypedDict, total=False):
-    drivers: pd.DataFrame            # input: all candidate drivers
+    drivers: pd.DataFrame            # input: candidate drivers
+    request_time: str                # input: requested_at of the ride (ISO 8601)
     available_drivers: pd.DataFrame  # node 1 output
-    driver_details: dict             # node 2 output: request_id -> list of driver dicts
+    driver_details: dict             # node 2 output: request_id -> ranked driver dicts
+    decision: dict                   # node 3 output: driver_id + arrival
 
 
 def filter_available(state: State) -> State:
@@ -33,34 +49,98 @@ def filter_available(state: State) -> State:
 
 
 def driver_details(state: State) -> State:
-    """Node 2: receives available drivers and their distance/time/route data."""
+    """Node 2: rank available drivers by road_pickup_minutes (fastest first)."""
     df = state["available_drivers"][DETAIL_FIELDS].sort_values(
         ["request_id", "road_pickup_minutes"]
     )
     df = df.astype(object).where(df.notna(), None)
-    details = {
-        rid: group.drop(columns="request_id").to_dict("records")
-        for rid, group in df.groupby("request_id", sort=True)
-    }
+    details = {}
+    for rid, group in df.groupby("request_id", sort=True):
+        rows = group.drop(columns="request_id").to_dict("records")
+        for rank, row in enumerate(rows, start=1):
+            row["rank"] = rank
+        details[rid] = rows
     return {"driver_details": details}
+
+
+def _ask_model(request_id: str, candidates: list[dict]) -> dict:
+    model = os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL)
+    prompt = (
+        f"Ride request {request_id}. Candidate drivers, ranked by road_pickup_minutes (rank 1 = fastest):\n"
+        f"{json.dumps(candidates, indent=1)}\n\n"
+        "Pick the single best driver to dispatch. Prefer the lowest road_pickup_minutes unless a "
+        "route_note makes that time unreliable. Reply with JSON only: "
+        '{"driver_id": "<id>", "arrival_minutes": <number>, "reason": "<short>"}'
+    )
+    last_err = None
+    for attempt_model in dict.fromkeys([model, FALLBACK_MODEL]):  # configured free model, then free router
+        for attempt in range(3):
+            resp = requests.post(
+                OPENROUTER_URL,
+                headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"},
+                json={"model": attempt_model, "messages": [{"role": "user", "content": prompt}], "temperature": 0},
+                timeout=90,
+            )
+            if resp.status_code == 429:  # free tier rate limit
+                last_err = resp.text[:200]
+                time.sleep(3 * (attempt + 1))
+                continue
+            resp.raise_for_status()
+            text = resp.json()["choices"][0]["message"]["content"]
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            if not match:
+                last_err = f"no JSON in reply: {text[:200]}"
+                continue
+            return {"model": attempt_model, **json.loads(match.group(0))}
+    raise RuntimeError(f"OpenRouter free models unavailable: {last_err}")
+
+
+def choose_driver(state: State) -> State:
+    """Node 3: the model picks one driver; arrival comes from the data, not the model."""
+    (request_id, candidates), = state["driver_details"].items()
+    answer = _ask_model(request_id, candidates)
+    chosen = next((c for c in candidates if c["driver_id"] == answer.get("driver_id")), None)
+    if chosen is None:  # model returned an id that isn't a candidate -> fall back to rank 1
+        chosen, answer["fallback"] = candidates[0], "model answer invalid; used rank 1"
+    minutes = chosen["road_pickup_minutes"]
+    arrival = pd.Timestamp(state["request_time"]) + timedelta(minutes=int(minutes))
+    return {
+        "decision": {
+            "request_id": request_id,
+            "driver_id": chosen["driver_id"],
+            "arrival_minutes": int(minutes),
+            "arrival_time": arrival.isoformat(),
+            "model": answer["model"],
+            "reason": answer.get("reason"),
+            **({"fallback": answer["fallback"]} if "fallback" in answer else {}),
+        }
+    }
 
 
 def build_graph():
     g = StateGraph(State)
     g.add_node("filter_available", filter_available)
     g.add_node("driver_details", driver_details)
+    g.add_node("choose_driver", choose_driver)
     g.add_edge(START, "filter_available")
     g.add_edge("filter_available", "driver_details")
-    g.add_edge("driver_details", END)
+    g.add_edge("driver_details", "choose_driver")
+    g.add_edge("choose_driver", END)
     return g.compile()
 
 
-def load_drivers() -> pd.DataFrame:
-    return pd.read_csv(DATA_DIR / "candidate_drivers.csv")
+def run_request(request_id: str) -> dict:
+    drivers = pd.read_csv(DATA_DIR / "candidate_drivers.csv")
+    requests_df = pd.read_csv(DATA_DIR / "ride_requests.csv")
+    drivers = drivers[drivers["request_id"] == request_id]
+    request_time = requests_df.loc[requests_df["request_id"] == request_id, "requested_at"].iloc[0]
+    return build_graph().invoke({"drivers": drivers, "request_time": request_time})
 
 
 if __name__ == "__main__":
-    result = build_graph().invoke({"drivers": load_drivers()})
-    print(f"available drivers: {len(result['available_drivers'])} of {len(result['drivers'])}")
-    for rid, drivers in result["driver_details"].items():
-        print(rid, [(d["driver_id"], d["road_pickup_minutes"]) for d in drivers])
+    rid = sys.argv[1] if len(sys.argv) > 1 else "RQ-0304-005"
+    result = run_request(rid)
+    print("ranked candidates:")
+    for d in result["driver_details"][rid]:
+        print(f"  #{d['rank']} {d['driver_id']}  {d['road_pickup_minutes']} min  ({d['straight_line_km']} km)")
+    print(json.dumps(result["decision"], indent=2))
