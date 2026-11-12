@@ -105,4 +105,4 @@ Activity from my OpenRouter dashboard (Explore tab, Request Count by Model, minu
 
 The highlighted bar and table row mark the request behind the `RQ-0304-005` output shown above. It is the last request in the chart, served by ERNIE-5.5-Flash-Preview through `openrouter/free`, which matches `"model": "openrouter/free"` in the output. The other bars are my earlier live runs and tests. The dashboard does not record request IDs, so I matched it by order: the `RQ-0304-005` output run was the last live call I made.
 
-![OpenRouter activity](docs/openrouter-activity.png)
+![OpenRouter activity](docs/openrouter-activity-minute.png)
