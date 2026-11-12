@@ -51,7 +51,7 @@ I then looked that ID up with OpenRouter's generation API (`python scripts/looku
 | Requested model | `openrouter/free` (router) |
 | Model that served it | `google/gemma-4-26b-a4b-it-20260403:free` |
 | Provider | Google AI Studio, status 200 |
-| Tokens | 375 prompt, 109 completion |
+| Tokens | 643 prompt, 146 completion (native, as the provider counts them); 375 / 109 in OpenRouter's normalized count |
 | Finish reason / cost | `stop` / $0 |
 
 The record has no prompt text and no `RQ-0304-005` ID, because OpenRouter never sees my request IDs. The link is the generation ID: the graph printed it in the output for `RQ-0304-005`, and the record above is what OpenRouter holds for that ID.
@@ -82,6 +82,15 @@ Streaming:    true
 Provider response: Google AI Studio, 200, 1.1 s
 Total: 3.9 s
 ```
+
+Screenshot of that row's Generation details (the page truncates the two IDs on screen; the full values are in the text above). I covered only the label of my API key:
+
+![OpenRouter Generation details for the 08:33 AM request](docs/openrouter-activity-row.png)
+
+Two things in this row look odd at first, so here is what I know:
+
+- **Tokens, 643 vs 375.** The record has two sets of counts. The Activity page shows the provider's native counts (643 in, 146 out), which are the `native_tokens_*` fields in the API record. The `tokens_prompt` / `tokens_completion` fields (375 / 109) are OpenRouter's normalized counts of the same call. Both are in [`docs/openrouter-record.json`](docs/openrouter-record.json).
+- **Streaming: true.** My code never sets a streaming option (there is no `stream` anywhere in `src/`), yet both the API record (`streamed: true`) and this page report it. I have not found out why. I only know it is what OpenRouter reports for this call, and it doesn't change the ranking, which the graph read from a normal non-streamed response.
 
 The Request ID and Generation ID are identical to the ones the graph printed and to the API record above, and the model that served it is Gemma 4 26B A4B. The Activity page says "I/O logging is not enabled" for my account, so it shows no prompt or completion text. Because of that, the prompt cannot be checked against this row; the ID is the link.
 

@@ -6,8 +6,11 @@
   "model": "google/gemma-4-26b-a4b-it-20260403:free",
   "provider_name": "Google AI Studio",
   "provider_status": 200,
-  "tokens_prompt": 375,
-  "tokens_completion": 109,
   "finish_reason": "stop",
-  "total_cost": 0
+  "total_cost": 0,
+  "tokens_prompt_normalized": 375,
+  "tokens_completion_normalized": 109,
+  "native_tokens_prompt": 643,
+  "native_tokens_completion": 146,
+  "streamed": true
 }
