@@ -1,0 +1,21 @@
+request_id,requested_at,rider_id,pickup_zone,pickup_lat,pickup_lng,pickup_river_side,dropoff_zone,is_bridge_case,distance_time_disagree
+RQ-0303-001,2025-03-03T08:14:37-08:00,RD-50318,Pearl District,45.5291,-122.6829,west,Lloyd District,true,true
+RQ-0303-002,2025-03-03T12:41:09-08:00,RD-27764,Hawthorne,45.5122,-122.6283,east,Downtown,false,false
+RQ-0303-003,2025-03-03T17:58:52-08:00,RD-61405,Downtown,45.5187,-122.6791,west,Kerns,true,false
+RQ-0304-004,2025-03-04T07:33:20-08:00,RD-38820,Lloyd District,45.5313,-122.6581,east,South Waterfront,true,true
+RQ-0304-005,2025-03-04T13:06:45-08:00,RD-44197,Goose Hollow,45.5183,-122.6927,west,Nob Hill,false,false
+RQ-0304-006,2025-03-04T21:47:13-08:00,RD-19056,Old Town,45.5243,-122.6731,west,Buckman,true,true
+RQ-0305-007,2025-03-05T06:52:04-08:00,RD-72631,Sellwood,45.4652,-122.6527,east,PDX Airport,false,false
+RQ-0305-008,2025-03-05T11:19:38-08:00,RD-33478,South Waterfront,45.4987,-122.6718,west,OMSI,true,true
+RQ-0305-009,2025-03-05T18:24:51-08:00,RD-58902,Central Eastside,45.5168,-122.6612,east,Pearl District,true,false
+RQ-0306-010,2025-03-06T08:03:27-08:00,RD-27764,Hosford-Abernethy,45.5063,-122.6532,east,Portland State University,false,false
+RQ-0306-011,2025-03-06T14:37:16-08:00,RD-46115,Portland State University,45.5114,-122.6836,west,Hawthorne,false,false
+RQ-0306-012,2025-03-06T19:12:40-08:00,RD-81240,Rose Quarter,45.5318,-122.6665,east,Old Town,true,true
+RQ-0307-013,2025-03-07T07:48:55-08:00,RD-39561,Nob Hill,45.5284,-122.6987,west,Pearl District,false,false
+RQ-0307-014,2025-03-07T16:22:08-08:00,RD-65027,Eliot,45.5408,-122.6618,east,Boise,false,true
+RQ-0307-015,2025-03-07T23:41:30-08:00,RD-50318,Downtown,45.5196,-122.6762,west,Irvington,true,false
+RQ-0308-016,2025-03-08T10:05:12-08:00,RD-74483,Kerns,45.5248,-122.6434,east,Downtown,false,false
+RQ-0308-017,2025-03-08T13:57:46-08:00,RD-22819,Boise,45.5488,-122.6752,east,Irvington,false,false
+RQ-0308-018,2025-03-08T22:16:03-08:00,RD-57390,Pearl District,45.5302,-122.6810,west,Eliot,true,true
+RQ-0309-019,2025-03-09T09:28:44-07:00,RD-63158,Irvington,45.5402,-122.6468,east,Goose Hollow,false,false
+RQ-0309-020,2025-03-09T15:51:29-07:00,RD-41736,OMSI,45.5082,-122.6657,east,South Waterfront,true,true
