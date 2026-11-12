@@ -50,6 +50,8 @@ Only use driver_ids from the list above. Reply with JSON only:
 {"ranking": [{"driver_id": "<id>", "reason": "<short>"}]}
 ```
 
+The road-minutes rule matters because straight-line distance can mislead: in the example above, `DRV-26148` is physically closest (0.33 km) but needs 8 minutes by road because of a one-way loop, so it ranks below `DRV-47038` (0.67 km, 4 min).
+
 ## Failure handling
 
 The graph does not crash on a bad model reply or an empty candidate list. Every result has a `status`:
@@ -60,10 +62,16 @@ The graph does not crash on a bad model reply or an empty candidate list. Every 
 | `ranked_fallback` | Model returned null / "nobody", IDs not on the list, duplicates, malformed JSON, or the API failed | Valid picks kept in the model's order, remaining slots filled by fastest `road_pickup_minutes` |
 | `pending_approval` | No candidate is `available` | `"message": "Pending approval"`, empty `ranking`; the model is not called |
 
-## Pushback line
+## Pushback
 
-> Prefer the lowest road_pickup_minutes unless a route_note, the river side or the bridge context makes that time unreliable.
+The question that changed the design came from the project owner during planning:
 
-This line pushes back on straight-line distance. In the example above, `DRV-26148` is physically closest (0.33 km) but needs 8 minutes by road because of a one-way loop, so it ranks below `DRV-47038` (0.67 km, 4 min).
+> "But if it were to return like nobody, or it starts returning people that aren't on the list, what are you going to return to the user? And what are you going to output?"
 
-The original plan also had no branch for zero candidates, so a request with no available drivers crashed the model node. That was caught in review and fixed by adding the `pending_approval` path.
+The plan had no branch for zero candidates: if every driver was `on_trip` or `offline`, nothing reached the model node and it crashed. That question exposed the gap, and the answer is the `pending_approval` path above: when node 1 leaves no available drivers, the graph returns `status: "pending_approval"` with `"message": "Pending approval"` and an empty ranking, and the model is never called. A model reply naming nobody, or a driver not on the list, is handled by the `ranked_fallback` path.
+
+## OpenRouter usage
+
+Activity from the OpenRouter dashboard (Explore tab, Request Count by Model, daily rollup) showing the graph is calling the free models. On 12 Nov it logged 7 requests across 5 free models (Gemma 4 31B 2, Nemotron 3 Ultra 2, Flint 1, ERNIE-5.5-Flash-Preview 1, North Mini Code 1); the `openrouter/free` fallback routes between free models, which is why more than one appears.
+
+![OpenRouter activity](docs/openrouter-activity.png)
